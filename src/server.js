@@ -23,18 +23,30 @@ const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === fileUR
 app.use(cors());
 app.use(express.json());
 
-app.get('/api/health', (_req, res) => {
+const apiRouter = express.Router();
+
+apiRouter.get('/health', (_req, res) => {
   res.json({ status: 'ok', message: 'College Management API is running' });
 });
 
-app.use('/api/auth', authRoutes);
-app.use('/api/students', studentRoutes);
-app.use('/api/faculty', facultyRoutes);
-app.use('/api/courses', courseRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/attendance', attendanceRoutes);
-app.use('/api/fees', feeRoutes);
-app.use('/api/notices', noticeRoutes);
+apiRouter.use('/auth', authRoutes);
+apiRouter.use('/students', studentRoutes);
+apiRouter.use('/faculty', facultyRoutes);
+apiRouter.use('/courses', courseRoutes);
+apiRouter.use('/dashboard', dashboardRoutes);
+apiRouter.use('/attendance', attendanceRoutes);
+apiRouter.use('/fees', feeRoutes);
+apiRouter.use('/notices', noticeRoutes);
+
+app.use((req, _res, next) => {
+  if (req.path.startsWith('/api/index')) {
+    req.url = req.url.replace(/^\/api\/index/, '');
+  }
+  next();
+});
+
+app.use('/api', apiRouter);
+app.use('/', apiRouter);
 
 const startServer = (port) => {
   const server = app.listen(port, () => {
