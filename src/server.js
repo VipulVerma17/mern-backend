@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -19,6 +20,14 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const clientDistIndexPath = path.join(rootDir, 'client', 'dist', 'index.html');
+const clientIndexPath = path.join(rootDir, 'client', 'index.html');
+const frontendIndexPath = fs.existsSync(clientDistIndexPath)
+  ? clientDistIndexPath
+  : fs.existsSync(clientIndexPath)
+    ? clientIndexPath
+    : null;
 
 app.use(cors());
 app.use(express.json());
@@ -46,7 +55,22 @@ app.use((req, _res, next) => {
 });
 
 app.use('/api', apiRouter);
-app.use('/', apiRouter);
+
+app.get(['/', '/:path(*)'], (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+
+  if (req.path.includes('.')) {
+    return next();
+  }
+
+  if (!frontendIndexPath) {
+    return res.status(404).json({ error: 'Frontend not built yet' });
+  }
+
+  return res.sendFile(frontendIndexPath);
+});
 
 const startServer = (port) => {
   const server = app.listen(port, () => {
