@@ -6,6 +6,11 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { setDatabaseReady } from './dataStore.js';
+import { logger } from './utils/logger.js';
+import { sendResponse, sendError } from './utils/responseFormatter.js';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import requestLogger from './middleware/requestLogger.js';
+import rateLimiter from './middleware/rateLimiter.js';
 import authRoutes from './routes/authRoutes.js';
 import studentRoutes from './routes/studentRoutes.js';
 import facultyRoutes from './routes/facultyRoutes.js';
@@ -14,6 +19,7 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 import attendanceRoutes from './routes/attendanceRoutes.js';
 import feeRoutes from './routes/feeRoutes.js';
 import noticeRoutes from './routes/noticeRoutes.js';
+import { HTTP_STATUS, RATE_LIMIT_CONFIG } from './config/constants.js';
 
 dotenv.config();
 
@@ -30,17 +36,28 @@ const frontendIndexPath = fs.existsSync(clientDistIndexPath)
     ? clientIndexPath
     : null;
 
-app.use(cors());
-app.use(express.json());
+// Middleware
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  credentials: true,
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+// Request logging and rate limiting
+app.use(requestLogger);
+app.use(rateLimiter(RATE_LIMIT_CONFIG.windowMs, RATE_LIMIT_CONFIG.maxRequests));
+
+// Static files
 if (fs.existsSync(clientDistDirPath)) {
   app.use(express.static(clientDistDirPath));
 }
 
 const apiRouter = express.Router();
 
+// Health check endpoint
 apiRouter.get('/health', (_req, res) => {
-  res.json({ status: 'ok', message: 'College Management API is running' });
+  sendResponse(res, HTTP_STATUS.OK, { status: 'healthy' }, 'College Management API is running');
 });
 
 apiRouter.use('/auth', authRoutes);
@@ -77,17 +94,21 @@ app.get(['/', '/:path(*)'], (req, res, next) => {
   return res.sendFile(frontendIndexPath);
 });
 
+// Error handling middleware
+app.use(notFoundHandler);
+app.use(errorHandler);
+
 const startServer = (port) => {
   const server = app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+    logger.info(`Server started successfully on port ${port}`, { port, environment: process.env.NODE_ENV });
   });
 
   server.on('error', (error) => {
     if (error.code === 'EADDRINUSE') {
-      console.warn(`Port ${port} is busy. Trying ${port + 1}...`);
+      logger.warn(`Port ${port} is busy. Trying ${port + 1}...`, { port });
       startServer(port + 1);
     } else {
-      console.error(error);
+      logger.error('Server error', { error: error.message, code: error.code });
       process.exit(1);
     }
   });
@@ -100,47 +121,59 @@ const connectMongoDB = async () => {
 
   mongoose.connection.on('connected', () => {
     setDatabaseReady(true);
-    console.log('MongoDB connected');
+    logger.info('MongoDB connected successfully', { dbName });
   });
 
   mongoose.connection.on('disconnected', () => {
     setDatabaseReady(false);
-    console.warn('MongoDB disconnected, continuing with in-memory fallback');
+    logger.warn('MongoDB disconnected, continuing with in-memory fallback');
+  });
+
+  mongoose.connection.on('error', (err) => {
+    logger.error('MongoDB connection error', { error: err.message });
   });
 
   const formatConnectionOptions = (uri) => {
     const uriHasDbName = /mongodb(?:\+srv)?:\/\/[^/]+\/[^^?]+/.test(uri);
-    return uriHasDbName ? {} : { dbName };
+    return {
+      ...(!uriHasDbName && { dbName }),
+      maxPoolSize: parseInt(process.env.DB_CONNECTION_POOL_SIZE) || 10,
+      minPoolSize: 2,
+      retryWrites: true,
+      w: 'majority',
+    };
   };
 
   const tryConnect = async (uri, label) => {
     try {
+      logger.info(`Attempting ${label} MongoDB connection...`, { uri: uri.split('@')[1] || 'local' });
       await mongoose.connect(uri, formatConnectionOptions(uri));
-      console.log(`Connected to ${label} MongoDB`);
+      logger.info(`Connected to ${label} MongoDB`, { label });
       return true;
     } catch (err) {
-      console.warn(`Failed to connect to ${label} MongoDB:`, err.message);
+      logger.warn(`Failed to connect to ${label} MongoDB`, { error: err.message });
       return false;
     }
   };
 
   if (atlasUri) {
-    console.log('Attempting MongoDB Atlas connection...');
+    logger.info('Attempting MongoDB Atlas connection...');
     const atlasConnected = await tryConnect(atlasUri, 'Atlas');
     if (atlasConnected) return;
 
-    console.log('Atlas connection failed; attempting local MongoDB fallback...');
+    logger.info('Atlas connection failed; attempting local MongoDB fallback...');
     const localConnected = await tryConnect(localUri, 'local');
     if (localConnected) return;
   } else {
-    console.log('No MONGO_URI provided; attempting local MongoDB...');
+    logger.info('No MONGO_URI provided; attempting local MongoDB...');
     const localConnected = await tryConnect(localUri, 'local');
     if (localConnected) return;
   }
 
   setDatabaseReady(false);
-  console.error('All MongoDB connection attempts failed. Continuing with in-memory fallback.');
-  console.error('If you are using Atlas, verify credentials, Network Access IP whitelist, and that the URI includes the correct database name.');
+  logger.error('All MongoDB connection attempts failed. Continuing with in-memory fallback.', {
+    hint: 'If using Atlas, verify credentials, Network Access IP whitelist, and URI includes correct database name'
+  });
 };
 
 if (isMainModule) {
