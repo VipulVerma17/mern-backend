@@ -126,7 +126,16 @@ const connectMongoDB = async () => {
     return mongoConnectionPromise;
   }
 
-  mongoConnectionPromise = connectMongoDBOnce();
+  mongoConnectionPromise = connectMongoDBOnce().then((connected) => {
+    if (!connected) {
+      mongoConnectionPromise = null;
+    }
+
+    return connected;
+  }).catch((error) => {
+    mongoConnectionPromise = null;
+    throw error;
+  });
   return mongoConnectionPromise;
 };
 
@@ -135,6 +144,7 @@ const connectMongoDBOnce = async () => {
   const localUri = 'mongodb://127.0.0.1:27017/college-management';
   const dbName = process.env.MONGO_DB_NAME || 'college-management';
   const isVercel = process.env.VERCEL === '1';
+  const skipLocalFallback = isVercel || process.env.NODE_ENV === 'production';
 
   mongoose.connection.on('connected', () => {
     setDatabaseReady(true);
@@ -179,9 +189,9 @@ const connectMongoDBOnce = async () => {
     const atlasConnected = await tryConnect(atlasUri, 'Atlas');
     if (atlasConnected) return true;
 
-    if (isVercel) {
+    if (skipLocalFallback) {
       setDatabaseReady(false);
-      logger.error('Atlas connection failed on Vercel. Skipping local MongoDB fallback.', {
+      logger.error('Atlas connection failed. Skipping local MongoDB fallback in hosted/production mode.', {
         hint: 'Set MONGO_URI or MONGODB_URI in Vercel project environment variables'
       });
       return false;
@@ -191,9 +201,9 @@ const connectMongoDBOnce = async () => {
     const localConnected = await tryConnect(localUri, 'local');
     if (localConnected) return true;
   } else {
-    if (isVercel) {
+    if (skipLocalFallback) {
       setDatabaseReady(false);
-      logger.error('No MongoDB URI provided on Vercel. Continuing with in-memory fallback.', {
+      logger.error('No MongoDB URI provided in hosted/production mode. Continuing with in-memory fallback.', {
         hint: 'Set MONGO_URI or MONGODB_URI in Vercel project environment variables'
       });
       return false;
