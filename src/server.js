@@ -26,7 +26,7 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const clientDistDirPath = path.join(rootDir, 'client', 'dist');
 const clientDistIndexPath = path.join(clientDistDirPath, 'index.html');
 const clientIndexPath = path.join(rootDir, 'client', 'index.html');
