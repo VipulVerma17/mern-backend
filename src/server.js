@@ -114,10 +114,27 @@ const startServer = (port) => {
   });
 };
 
+let mongoConnectionPromise = null;
+
 const connectMongoDB = async () => {
-  const atlasUri = process.env.MONGO_URI;
+  if (mongoose.connection.readyState === 1) {
+    setDatabaseReady(true);
+    return true;
+  }
+
+  if (mongoConnectionPromise) {
+    return mongoConnectionPromise;
+  }
+
+  mongoConnectionPromise = connectMongoDBOnce();
+  return mongoConnectionPromise;
+};
+
+const connectMongoDBOnce = async () => {
+  const atlasUri = process.env.MONGO_URI || process.env.MONGODB_URI;
   const localUri = 'mongodb://127.0.0.1:27017/college-management';
   const dbName = process.env.MONGO_DB_NAME || 'college-management';
+  const isVercel = process.env.VERCEL === '1';
 
   mongoose.connection.on('connected', () => {
     setDatabaseReady(true);
@@ -139,6 +156,7 @@ const connectMongoDB = async () => {
       ...(!uriHasDbName && { dbName }),
       maxPoolSize: parseInt(process.env.DB_CONNECTION_POOL_SIZE) || 10,
       minPoolSize: 2,
+      serverSelectionTimeoutMS: parseInt(process.env.DB_SERVER_SELECTION_TIMEOUT_MS) || 5000,
       retryWrites: true,
       w: 'majority',
     };
@@ -159,21 +177,39 @@ const connectMongoDB = async () => {
   if (atlasUri) {
     logger.info('Attempting MongoDB Atlas connection...');
     const atlasConnected = await tryConnect(atlasUri, 'Atlas');
-    if (atlasConnected) return;
+    if (atlasConnected) return true;
+
+    if (isVercel) {
+      setDatabaseReady(false);
+      logger.error('Atlas connection failed on Vercel. Skipping local MongoDB fallback.', {
+        hint: 'Set MONGO_URI or MONGODB_URI in Vercel project environment variables'
+      });
+      return false;
+    }
 
     logger.info('Atlas connection failed; attempting local MongoDB fallback...');
     const localConnected = await tryConnect(localUri, 'local');
-    if (localConnected) return;
+    if (localConnected) return true;
   } else {
-    logger.info('No MONGO_URI provided; attempting local MongoDB...');
+    if (isVercel) {
+      setDatabaseReady(false);
+      logger.error('No MongoDB URI provided on Vercel. Continuing with in-memory fallback.', {
+        hint: 'Set MONGO_URI or MONGODB_URI in Vercel project environment variables'
+      });
+      return false;
+    }
+
+    logger.info('No MONGO_URI or MONGODB_URI provided; attempting local MongoDB...');
     const localConnected = await tryConnect(localUri, 'local');
-    if (localConnected) return;
+    if (localConnected) return true;
   }
 
   setDatabaseReady(false);
   logger.error('All MongoDB connection attempts failed. Continuing with in-memory fallback.', {
     hint: 'If using Atlas, verify credentials, Network Access IP whitelist, and URI includes correct database name'
   });
+
+  return false;
 };
 
 if (isMainModule) {
@@ -183,3 +219,4 @@ if (isMainModule) {
 }
 
 export default app;
+export { connectMongoDB };
