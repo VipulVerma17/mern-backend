@@ -35,14 +35,9 @@ const PORT = Number(process.env.PORT) || 5000;
 const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === currentFilePath;
 const clientDistDirPath = path.join(rootDir, 'client', 'dist');
 const clientDistIndexPath = path.join(clientDistDirPath, 'index.html');
-const clientIndexPath = path.join(rootDir, 'client', 'index.html');
 const getFrontendIndexPath = () => {
   if (fs.existsSync(clientDistIndexPath)) {
     return clientDistIndexPath;
-  }
-
-  if (fs.existsSync(clientIndexPath)) {
-    return clientIndexPath;
   }
 
   return null;
