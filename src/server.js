@@ -101,9 +101,19 @@ app.get(['/', '/:path(*)'], (req, res, next) => {
   const frontendIndexPath = getFrontendIndexPath();
 
   if (!frontendIndexPath) {
+    if (req.path === '/') {
+      return sendResponse(
+        res,
+        HTTP_STATUS.OK,
+        { status: 'running', health: '/api/health' },
+        'College Management API is running'
+      );
+    }
+
     return res.status(404).json({
       error: 'Frontend build not found',
-      message: 'Run npm run build before serving the web app, or open /api/health to check the backend.',
+      message: 'This deployment is serving the backend only. Open /api or /api/health to check the API.',
+      apiUrl: '/api',
       apiHealthUrl: '/api/health',
     });
   }
