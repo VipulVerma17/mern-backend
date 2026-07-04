@@ -33,6 +33,7 @@ dotenv.config({ path: serverEnvPath, override: true });
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === currentFilePath;
+const isVercelDeployment = process.env.VERCEL === '1';
 const clientDistDirPath = path.join(rootDir, 'client', 'dist');
 const clientDistIndexPath = path.join(clientDistDirPath, 'index.html');
 const clientIndexPath = path.join(rootDir, 'client', 'index.html');
@@ -62,6 +63,10 @@ if (fs.existsSync(clientDistDirPath)) {
 const apiRouter = express.Router();
 
 // Health check endpoint
+apiRouter.get('/', (_req, res) => {
+  sendResponse(res, HTTP_STATUS.OK, { status: 'running' }, 'College Management API is running');
+});
+
 apiRouter.get('/health', (_req, res) => {
   sendResponse(res, HTTP_STATUS.OK, { status: 'healthy' }, 'College Management API is running');
 });
@@ -91,6 +96,10 @@ app.get(['/', '/:path(*)'], (req, res, next) => {
 
   if (req.path.includes('.')) {
     return next();
+  }
+
+  if (!frontendIndexPath && isVercelDeployment) {
+    return sendError(res, HTTP_STATUS.NOT_FOUND, 'Route not found');
   }
 
   if (!frontendIndexPath) {
