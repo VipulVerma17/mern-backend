@@ -33,23 +33,9 @@ dotenv.config({ path: serverEnvPath, override: true });
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === currentFilePath;
-const isVercelDeployment = process.env.VERCEL === '1';
 const clientDistDirPath = path.join(rootDir, 'client', 'dist');
 const clientDistIndexPath = path.join(clientDistDirPath, 'index.html');
 const clientIndexPath = path.join(rootDir, 'client', 'index.html');
-const fallbackFrontendHtml = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>College Management System</title>
-    <script type="module" crossorigin src="/assets/index-BdosM8VN.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DEHqSXqS.css">
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
-</html>`;
 const getFrontendIndexPath = () => {
   if (fs.existsSync(clientDistIndexPath)) {
     return clientDistIndexPath;
@@ -119,12 +105,12 @@ app.get(['/', '/:path(*)'], (req, res, next) => {
 
   const frontendIndexPath = getFrontendIndexPath();
 
-  if (!frontendIndexPath && isVercelDeployment) {
-    return res.type('html').send(fallbackFrontendHtml);
-  }
-
   if (!frontendIndexPath) {
-    return res.status(404).json({ error: 'Frontend not built yet' });
+    return res.status(404).json({
+      error: 'Frontend build not found',
+      message: 'Run npm run build before serving the web app, or open /api/health to check the backend.',
+      apiHealthUrl: '/api/health',
+    });
   }
 
   return res.sendFile(frontendIndexPath);
