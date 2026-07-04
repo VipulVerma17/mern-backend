@@ -21,12 +21,18 @@ import feeRoutes from './routes/feeRoutes.js';
 import noticeRoutes from './routes/noticeRoutes.js';
 import { HTTP_STATUS, RATE_LIMIT_CONFIG } from './config/constants.js';
 
-dotenv.config();
+const currentFilePath = fileURLToPath(import.meta.url);
+const currentDir = path.dirname(currentFilePath);
+const rootDir = path.resolve(currentDir, '..', '..');
+const serverEnvPath = path.join(rootDir, 'server', '.env');
+const rootEnvPath = path.join(rootDir, '.env');
+
+dotenv.config({ path: rootEnvPath });
+dotenv.config({ path: serverEnvPath, override: true });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
-const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === currentFilePath;
 const clientDistDirPath = path.join(rootDir, 'client', 'dist');
 const clientDistIndexPath = path.join(clientDistDirPath, 'index.html');
 const clientIndexPath = path.join(rootDir, 'client', 'index.html');
