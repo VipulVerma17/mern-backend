@@ -37,6 +37,19 @@ const isVercelDeployment = process.env.VERCEL === '1';
 const clientDistDirPath = path.join(rootDir, 'client', 'dist');
 const clientDistIndexPath = path.join(clientDistDirPath, 'index.html');
 const clientIndexPath = path.join(rootDir, 'client', 'index.html');
+const fallbackFrontendHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>College Management System</title>
+    <script type="module" crossorigin src="/assets/index-BdosM8VN.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DEHqSXqS.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>`;
 const getFrontendIndexPath = () => {
   if (fs.existsSync(clientDistIndexPath)) {
     return clientDistIndexPath;
@@ -107,7 +120,7 @@ app.get(['/', '/:path(*)'], (req, res, next) => {
   const frontendIndexPath = getFrontendIndexPath();
 
   if (!frontendIndexPath && isVercelDeployment) {
-    return sendError(res, HTTP_STATUS.NOT_FOUND, 'Route not found');
+    return res.type('html').send(fallbackFrontendHtml);
   }
 
   if (!frontendIndexPath) {
