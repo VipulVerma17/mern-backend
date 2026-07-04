@@ -37,11 +37,17 @@ const isVercelDeployment = process.env.VERCEL === '1';
 const clientDistDirPath = path.join(rootDir, 'client', 'dist');
 const clientDistIndexPath = path.join(clientDistDirPath, 'index.html');
 const clientIndexPath = path.join(rootDir, 'client', 'index.html');
-const frontendIndexPath = fs.existsSync(clientDistIndexPath)
-  ? clientDistIndexPath
-  : fs.existsSync(clientIndexPath)
-    ? clientIndexPath
-    : null;
+const getFrontendIndexPath = () => {
+  if (fs.existsSync(clientDistIndexPath)) {
+    return clientDistIndexPath;
+  }
+
+  if (fs.existsSync(clientIndexPath)) {
+    return clientIndexPath;
+  }
+
+  return null;
+};
 
 // Middleware
 app.use(cors({
@@ -97,6 +103,8 @@ app.get(['/', '/:path(*)'], (req, res, next) => {
   if (req.path.includes('.')) {
     return next();
   }
+
+  const frontendIndexPath = getFrontendIndexPath();
 
   if (!frontendIndexPath && isVercelDeployment) {
     return sendError(res, HTTP_STATUS.NOT_FOUND, 'Route not found');
